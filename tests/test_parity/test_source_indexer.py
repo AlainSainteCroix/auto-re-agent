@@ -1,4 +1,5 @@
 """Tests for source indexer."""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -9,13 +10,13 @@ from re_agent.parity.source_indexer import SourceIndexer
 
 def test_find_function_body(tmp_path: Path) -> None:
     src = tmp_path / "test.cpp"
-    src.write_text('''
+    src.write_text("""
 void CTrain::ProcessControl() {
     if (m_nStatus == 5) {
         DoStuff();
     }
 }
-''')
+""")
     indexer = SourceIndexer(tmp_path)
     match = indexer.find("CTrain", "ProcessControl")
     assert match is not None
@@ -33,11 +34,11 @@ def test_find_returns_none_for_missing(tmp_path: Path) -> None:
 
 def test_stub_marker_detection(tmp_path: Path) -> None:
     src = tmp_path / "test.cpp"
-    src.write_text('''
+    src.write_text("""
 void CTrain::Shutdown() {
     NOTSA_UNREACHABLE();
 }
-''')
+""")
     indexer = SourceIndexer(tmp_path)
     match = indexer.find("CTrain", "Shutdown")
     assert match is not None
@@ -46,11 +47,11 @@ void CTrain::Shutdown() {
 
 def test_inline_forwarder_detection(tmp_path: Path) -> None:
     src = tmp_path / "test.cpp"
-    src.write_text('''
+    src.write_text("""
 void CTrain::UpdateSpeed() {
     return I_UpdateSpeed<false>();
 }
-''')
+""")
     indexer = SourceIndexer(tmp_path)
     match = indexer.find("CTrain", "UpdateSpeed")
     assert match is not None
@@ -75,6 +76,47 @@ def test_find_empty_fn_name_with_class_returns_none(tmp_path: Path) -> None:
     assert indexer.find("CTrain", "") is None
 
 
+# -- Robustness: unreadable / vanishing source entries -------------------------
+
+
+def test_directory_named_like_source_is_skipped(tmp_path: Path) -> None:
+    """A directory matching *.cpp must not abort indexing."""
+    (tmp_path / "weird.cpp").mkdir()
+    src = tmp_path / "real.cpp"
+    src.write_text("void CTrain::Go() { DoStuff(); }\n")
+    indexer = SourceIndexer(tmp_path)
+    match = indexer.find("CTrain", "Go")
+    assert match is not None
+    assert match.call_count >= 1
+
+
+def test_broken_symlink_is_skipped(tmp_path: Path) -> None:
+    """A dangling *.cpp symlink must not crash the indexer."""
+    (tmp_path / "dangling.cpp").symlink_to(tmp_path / "nonexistent.cpp")
+    src = tmp_path / "real.cpp"
+    src.write_text("void CTrain::Go() { }\n")
+    indexer = SourceIndexer(tmp_path)
+    # Build succeeded; a valid lookup still works.
+    assert indexer.find("CTrain", "Go") is not None
+
+
+def test_file_removed_after_init_does_not_crash(tmp_path: Path) -> None:
+    """A file deleted between indexing and lookup yields None, not an error."""
+    src = tmp_path / "test.cpp"
+    src.write_text("void CTrain::Go() { DoStuff(); }\n")
+    indexer = SourceIndexer(tmp_path)
+    indexer.file_text_cache.clear()  # force a re-read on lookup
+    src.unlink()
+    assert indexer.find("CTrain", "Go") is None
+
+
+def test_missing_source_root_yields_no_matches(tmp_path: Path) -> None:
+    """A non-existent source root indexes to empty without raising."""
+    indexer = SourceIndexer(tmp_path / "does-not-exist")
+    assert indexer.source_files == []
+    assert indexer.find("CTrain", "Go") is None
+
+
 # -- find_by_address with hook_patterns ----------------------------------------
 
 
@@ -97,7 +139,7 @@ def _make_profile(**overrides: object) -> ProjectProfile:
 
 def test_find_by_address_resolves_via_hook_pattern(tmp_path: Path) -> None:
     src = tmp_path / "CTrain.cpp"
-    src.write_text('''\
+    src.write_text("""\
 RH_ScopedClass(CTrain);
 RH_ScopedInstall(ProcessControl, 0x6F86A0);
 RH_ScopedInstall(Shutdown, 0x6F5900);
@@ -109,7 +151,7 @@ void CTrain::ProcessControl() {
 void CTrain::Shutdown() {
     NOTSA_UNREACHABLE();
 }
-''')
+""")
     profile = _make_profile(source_root=str(tmp_path))
     indexer = SourceIndexer(tmp_path, profile)
 
@@ -135,14 +177,14 @@ def test_find_by_address_unknown_returns_none(tmp_path: Path) -> None:
 def test_hook_address_index_extracts_class_name(tmp_path: Path) -> None:
     """Verify that _build_index reads RH_ScopedClass for class names."""
     src = tmp_path / "CTrain.cpp"
-    src.write_text('''\
+    src.write_text("""\
 RH_ScopedClass(CTrain);
 RH_ScopedInstall(ProcessControl, 0x6F86A0);
 
 void CTrain::ProcessControl() {
     DoStuff();
 }
-''')
+""")
     profile = _make_profile(source_root=str(tmp_path))
     indexer = SourceIndexer(tmp_path, profile)
     entry = indexer.hook_address_index.get("0x6f86a0")
