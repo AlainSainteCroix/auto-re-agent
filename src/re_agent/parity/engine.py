@@ -1,4 +1,5 @@
 """Top-level parity engine — runs all signals and aggregates results."""
+
 from __future__ import annotations
 
 import csv
@@ -31,6 +32,34 @@ logger = logging.getLogger(__name__)
 
 HOOK_ADDR_RE = re.compile(r"^0x[0-9a-fA-F]+$")
 
+_CSV_TRUE = {"true", "yes", "y", "t"}
+_CSV_FALSE = {"false", "no", "n", "f"}
+
+
+def _csv_bool(value: str | None, default: bool) -> bool:
+    """Parse a boolean-ish CSV cell tolerantly.
+
+    A hand-authored ``hooks.csv`` may carry an empty cell, a word
+    (``true``/``no``), or be a short row (``csv.DictReader`` yields ``None``
+    for missing trailing fields). Feeding any of those straight to ``int()``
+    would raise and abort the whole hook load, so fall back to *default* for
+    anything unrecognised while preserving the original numeric semantics
+    (any non-zero int is truthy).
+    """
+    if value is None:
+        return default
+    v = value.strip().lower()
+    if not v:
+        return default
+    try:
+        return bool(int(v))
+    except ValueError:
+        if v in _CSV_TRUE:
+            return True
+        if v in _CSV_FALSE:
+            return False
+        return default
+
 
 def read_hooks(path: Path, include_unreversed: bool = False) -> list[HookEntry]:
     """Read hooks from a CSV file.
@@ -48,7 +77,7 @@ def read_hooks(path: Path, include_unreversed: bool = False) -> list[HookEntry]:
             if not HOOK_ADDR_RE.match(addr):
                 continue
 
-            rev = bool(int(row["reversed"])) if "reversed" in fields else True
+            rev = _csv_bool(row.get("reversed"), True) if "reversed" in fields else True
             if not include_unreversed and not rev:
                 continue
 
@@ -64,14 +93,16 @@ def read_hooks(path: Path, include_unreversed: bool = False) -> list[HookEntry]:
                 else:
                     fn_name = full_name
 
-            out.append(HookEntry(
-                class_path=class_path,
-                fn_name=fn_name,
-                address=addr.lower(),
-                reversed=rev,
-                locked=bool(int(row["locked"])) if "locked" in fields else False,
-                is_virtual=bool(int(row["is_virtual"])) if "is_virtual" in fields else False,
-            ))
+            out.append(
+                HookEntry(
+                    class_path=class_path,
+                    fn_name=fn_name,
+                    address=addr.lower(),
+                    reversed=rev,
+                    locked=_csv_bool(row.get("locked"), False) if "locked" in fields else False,
+                    is_virtual=_csv_bool(row.get("is_virtual"), False) if "is_virtual" in fields else False,
+                )
+            )
     return out
 
 
@@ -182,11 +213,13 @@ def run_parity(
 
         if addr_key in manual_checks:
             mc = manual_checks[addr_key]
-            results.append({
-                "hook": entry,
-                "status": ParityStatus.GREEN,
-                "findings": [Finding(level="info", reason=f"Manual check override: {mc.note}")],
-            })
+            results.append(
+                {
+                    "hook": entry,
+                    "status": ParityStatus.GREEN,
+                    "findings": [Finding(level="info", reason=f"Manual check override: {mc.note}")],
+                }
+            )
             continue
 
         # Try address-based lookup first (uses hook_patterns index),
@@ -208,12 +241,14 @@ def run_parity(
                 logger.warning("Failed to fetch Ghidra data for %s", entry.address, exc_info=True)
 
         status, findings = score_single(entry, source, ghidra, parity_cfg, semantic_rules)
-        results.append({
-            "hook": entry,
-            "status": status,
-            "findings": findings,
-            "source": source,
-            "ghidra": ghidra,
-        })
+        results.append(
+            {
+                "hook": entry,
+                "status": status,
+                "findings": findings,
+                "source": source,
+                "ghidra": ghidra,
+            }
+        )
 
     return results
