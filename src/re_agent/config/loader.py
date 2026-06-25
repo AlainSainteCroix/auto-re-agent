@@ -1,4 +1,5 @@
 """Configuration loader for re-agent."""
+
 from __future__ import annotations
 
 import dataclasses
@@ -35,8 +36,7 @@ def _load_yaml_file(path: Path) -> dict[str, Any]:
         import yaml  # type: ignore[import-untyped]
     except ImportError as err:
         raise ImportError(
-            "PyYAML is required for loading YAML config files. "
-            "Install it with: pip install pyyaml"
+            "PyYAML is required for loading YAML config files. Install it with: pip install pyyaml"
         ) from err
     text = path.read_text(encoding="utf-8")
     data = yaml.safe_load(text)
@@ -117,6 +117,16 @@ _log = logging.getLogger(__name__)
 
 def _build_with_coercion(cls: type[_T], data: dict[str, Any]) -> _T:
     """Build a dataclass from a raw dict, coercing types and warning on unknowns."""
+    if not isinstance(data, dict):
+        # An empty YAML section parses to None, and a hand-edited file may put a
+        # scalar or list where a mapping is expected. Fall back to defaults with
+        # a warning instead of crashing on data.items().
+        _log.warning(
+            "Config section for %s is not a mapping (got %s) — using defaults",
+            cls.__name__,
+            type(data).__name__,
+        )
+        data = {}
     known = {f.name: f for f in dataclasses.fields(cls)}  # type: ignore[arg-type]
     filtered: dict[str, Any] = {}
     for k, v in data.items():
@@ -127,7 +137,9 @@ def _build_with_coercion(cls: type[_T], data: dict[str, Any]) -> _T:
         else:
             _log.warning(
                 "Unknown config key '%s' in %s (known: %s) — ignored",
-                k, cls.__name__, ", ".join(sorted(known)),
+                k,
+                cls.__name__,
+                ", ".join(sorted(known)),
             )
     return cls(**filtered)
 

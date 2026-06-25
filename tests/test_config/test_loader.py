@@ -1,4 +1,5 @@
 """Tests for config loading."""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -37,3 +38,30 @@ def test_env_override(monkeypatch: pytest.MonkeyPatch) -> None:
     config = load_config(None)
     assert config.llm.provider == "openai"
     assert config.llm.model == "gpt-4o"
+
+
+def _write_yaml(tmp_path: Path, text: str) -> Path:
+    p = tmp_path / "re-agent.yaml"
+    p.write_text(text, encoding="utf-8")
+    return p
+
+
+def test_empty_yaml_section_uses_defaults_not_crash(tmp_path: Path) -> None:
+    """An empty section parses to None; raw.get(..., {}) returns None, which
+    used to blow up on data.items(). It must fall back to defaults instead."""
+    cfg = _write_yaml(tmp_path, "llm:\nbackend:\n  cli_path: /usr/bin/ghidra\n")
+    config = load_config(cfg)
+    assert config.llm.provider == "claude"  # default preserved
+    assert config.backend.cli_path == "/usr/bin/ghidra"  # sibling still applied
+
+
+def test_scalar_yaml_section_uses_defaults_not_crash(tmp_path: Path) -> None:
+    cfg = _write_yaml(tmp_path, "llm: gpt-4o\n")
+    config = load_config(cfg)
+    assert config.llm.provider == "claude"
+
+
+def test_list_yaml_section_uses_defaults_not_crash(tmp_path: Path) -> None:
+    cfg = _write_yaml(tmp_path, "parity:\n  - one\n  - two\n")
+    config = load_config(cfg)
+    assert config.parity.call_count_warn_diff == load_config(None).parity.call_count_warn_diff
