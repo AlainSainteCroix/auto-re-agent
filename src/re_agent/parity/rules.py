@@ -1,4 +1,5 @@
 """Semantic rules (JSON) and manual approval checks (.md) for parity overrides."""
+
 from __future__ import annotations
 
 import json
@@ -59,17 +60,30 @@ def read_semantic_rules(path: Path) -> list[SemanticRule]:
         source_all_of = [s for s in rr.get("source_all_of", []) if isinstance(s, str)]
         source_any_of = [s for s in rr.get("source_any_of", []) if isinstance(s, str)]
         source_none_of = [s for s in rr.get("source_none_of", []) if isinstance(s, str)]
-        rules.append(SemanticRule(
-            id=rid, reason=reason, severity=sev,
-            addresses=addresses, symbols=symbols,
-            source_all_of=source_all_of, source_any_of=source_any_of, source_none_of=source_none_of,
-        ))
+        rules.append(
+            SemanticRule(
+                id=rid,
+                reason=reason,
+                severity=sev,
+                addresses=addresses,
+                symbols=symbols,
+                source_all_of=source_all_of,
+                source_any_of=source_any_of,
+                source_none_of=source_none_of,
+            )
+        )
     return rules
 
 
 def _match_pattern(text: str, pattern: str) -> bool:
     if pattern.startswith("re:"):
-        return re.search(pattern[3:], text) is not None
+        try:
+            return re.search(pattern[3:], text) is not None
+        except re.error as e:
+            # A hand-authored rules file may carry an invalid regex; warn and
+            # treat it as a non-match instead of aborting the whole parity run.
+            print(f"WARNING: invalid semantic rule regex {pattern!r}: {e}", file=sys.stderr)
+            return False
     return pattern in text
 
 
