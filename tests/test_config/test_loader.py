@@ -1,4 +1,5 @@
 """Tests for config loading."""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -13,9 +14,19 @@ def test_load_default_config() -> None:
     config = load_config(None)
     assert isinstance(config, ReAgentConfig)
     assert config.llm.provider == "claude"
+    assert config.llm.use_bedrock is True
+    assert config.llm.model == "us.anthropic.claude-opus-4-6-v1"
     assert config.backend.type == "ghidra-bridge"
     assert config.orchestrator.max_review_rounds == 4
     assert config.orchestrator.objective_verifier_enabled is True
+
+
+def test_bedrock_env_override_coerces_bool(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("RE_AGENT_BEDROCK", "false")
+    monkeypatch.setenv("RE_AGENT_LLM_AWS_REGION", "us-east-1")
+    config = load_config(None)
+    assert config.llm.use_bedrock is False
+    assert config.llm.aws_region == "us-east-1"
 
 
 def test_load_from_yaml(sample_config_path: Path) -> None:

@@ -1,4 +1,5 @@
 """LLM provider factory registry."""
+
 from __future__ import annotations
 
 from re_agent.config.schema import LLMConfig
@@ -26,6 +27,9 @@ def create_provider(config: LLMConfig) -> LLMProvider:
             model=config.model,
             max_tokens=config.max_tokens,
             temperature=config.temperature,
+            base_url=config.base_url,
+            use_bedrock=config.use_bedrock,
+            aws_region=config.aws_region,
         )
 
     if config.provider in ("openai", "openai-compat"):
@@ -48,6 +52,5 @@ def create_provider(config: LLMConfig) -> LLMProvider:
         )
 
     raise ValueError(
-        f"Unknown LLM provider: {config.provider!r}. "
-        f"Supported providers: 'claude', 'openai', 'openai-compat', 'codex'."
+        f"Unknown LLM provider: {config.provider!r}. Supported providers: 'claude', 'openai', 'openai-compat', 'codex'."
     )

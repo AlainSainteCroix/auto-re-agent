@@ -78,8 +78,10 @@ re-agent uses a layered configuration system (highest priority first): CLI flags
 ```yaml
 llm:
   provider: claude           # claude | openai | openai-compat | codex
-  model: claude-sonnet-4-5-20250929
-  # api_key: set via RE_AGENT_LLM_API_KEY env var
+  model: us.anthropic.claude-opus-4-6-v1   # Bedrock inference profile (default)
+  use_bedrock: true          # false -> direct Anthropic / OpenAI-compatible API
+  # aws_region: set via RE_AGENT_LLM_AWS_REGION or AWS_REGION
+  # api_key: set via RE_AGENT_LLM_API_KEY env var (direct mode)
   timeout_s: 1800
 
 backend:
@@ -116,7 +118,7 @@ See [docs/configuration.md](docs/configuration.md) for all options.
 
 ## LLM Providers
 
-- **Claude** (Anthropic SDK) — set `ANTHROPIC_API_KEY`
+- **Claude** (Anthropic SDK) — defaults to AWS Bedrock (`use_bedrock: true`), reading AWS credentials from the standard chain (`~/.aws/credentials`, `AWS_*`, instance role). Set `use_bedrock: false` and `ANTHROPIC_API_KEY` for the direct API.
 - **OpenAI / OpenAI-compatible** — set `OPENAI_API_KEY`, optionally set `base_url`
 - **Codex CLI** — uses local `codex exec` with ChatGPT login credentials; no API key required
 

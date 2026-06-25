@@ -10,6 +10,11 @@ import anthropic
 
 from re_agent.llm.protocol import Message
 
+#: Default model when running on AWS Bedrock (inference profile id).
+DEFAULT_BEDROCK_MODEL = "us.anthropic.claude-opus-4-6-v1"
+#: Default model when calling the direct / compatible Anthropic API.
+DEFAULT_DIRECT_MODEL = "claude-opus-4-8"
+
 
 class ClaudeProvider:
     """LLM provider backed by an Anthropic-compatible Claude API.
@@ -38,6 +43,9 @@ class ClaudeProvider:
             ``None``, falls back to the ``ANTHROPIC_BASE_URL`` env var.
         use_bedrock: Force the Bedrock backend. If ``None``, enabled when the
             ``RE_AGENT_BEDROCK`` env var is set to a truthy value.
+        aws_region: AWS region for the Bedrock backend. If ``None``, falls
+            back to ``AWS_REGION`` / ``AWS_DEFAULT_REGION``, then the SDK's
+            own resolution.
     """
 
     def __init__(
@@ -48,26 +56,27 @@ class ClaudeProvider:
         temperature: float = 0.0,
         base_url: str | None = None,
         use_bedrock: bool | None = None,
+        aws_region: str | None = None,
     ) -> None:
         if use_bedrock is None:
             use_bedrock = os.environ.get("RE_AGENT_BEDROCK", "").lower() in ("1", "true", "yes")
 
         if use_bedrock:
             bedrock_kwargs: dict[str, Any] = {}
-            region = os.environ.get("AWS_REGION") or os.environ.get("AWS_DEFAULT_REGION")
+            region = aws_region or os.environ.get("AWS_REGION") or os.environ.get("AWS_DEFAULT_REGION")
             if region:
                 bedrock_kwargs["aws_region"] = region
             self._client: anthropic.Anthropic | anthropic.AnthropicBedrock = anthropic.AnthropicBedrock(
                 **bedrock_kwargs
             )
-            self._model = model or os.environ.get("RE_AGENT_BEDROCK_MODEL", "us.anthropic.claude-opus-4-6-v1")
+            self._model = model or os.environ.get("RE_AGENT_BEDROCK_MODEL", DEFAULT_BEDROCK_MODEL)
         else:
             resolved_base_url = base_url or os.environ.get("ANTHROPIC_BASE_URL")
             client_kwargs: dict[str, Any] = {"api_key": api_key}
             if resolved_base_url:
                 client_kwargs["base_url"] = resolved_base_url
             self._client = anthropic.Anthropic(**client_kwargs)
-            self._model = model or os.environ.get("ANTHROPIC_MODEL", "claude-opus-4-8")
+            self._model = model or os.environ.get("ANTHROPIC_MODEL", DEFAULT_DIRECT_MODEL)
 
         self._max_tokens = max_tokens
         self._temperature = temperature
