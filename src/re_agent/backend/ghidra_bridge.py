@@ -144,8 +144,13 @@ class GhidraBridgeBackend:
         for line in raw.splitlines():
             stripped = line.strip()
             if stripped and not stripped.startswith("//") and not stripped.startswith("Callers"):
-                # Heuristic: take the first line that looks like a signature.
-                name = stripped.split("(")[0].split()[-1] if "(" in stripped else target
+                # Heuristic: take the last token before "(" as the function name.
+                # A decompiled line may start with a cast (e.g. "(int)foo(...)"),
+                # leaving nothing before "(" — keep the target name in that case
+                # rather than indexing an empty token list.
+                tokens_before_paren = stripped.split("(", 1)[0].split()
+                if "(" in stripped and tokens_before_paren:
+                    name = tokens_before_paren[-1]
                 break
 
         return DecompileResult(

@@ -181,3 +181,33 @@ def test_capabilities_probe_uses_dump_asm() -> None:
     assert "dump-asm" in probed
     assert "asm" not in probed
     assert caps.has_asm is True
+
+
+def test_decompile_extracts_name_from_signature() -> None:
+    """A normal signature line yields the last token before '(' as the name."""
+    backend = GhidraBridgeBackend(cli_path="fake-ghidra")
+    raw = "undefined4 MyClass::doThing(int a, int b)\nCallers: 2 | Callees: 1\n"
+    with patch.object(backend, "_run", return_value=raw):
+        result = backend.decompile("0x1000")
+    assert result.name == "MyClass::doThing"
+    assert result.callers == 2
+    assert result.callees == 1
+
+
+def test_decompile_signature_starting_with_cast_does_not_crash() -> None:
+    """A first meaningful line starting with a cast leaves nothing before '(';
+    the name must fall back to the target instead of raising IndexError."""
+    backend = GhidraBridgeBackend(cli_path="fake-ghidra")
+    raw = "(int)foo(x)\n"
+    with patch.object(backend, "_run", return_value=raw):
+        result = backend.decompile("0xDEAD")
+    assert result.name == "0xDEAD"
+
+
+def test_decompile_line_without_paren_keeps_target_name() -> None:
+    """A meaningful line with no '(' must not be misparsed as a signature."""
+    backend = GhidraBridgeBackend(cli_path="fake-ghidra")
+    raw = "some banner text\n"
+    with patch.object(backend, "_run", return_value=raw):
+        result = backend.decompile("0xBEEF")
+    assert result.name == "0xBEEF"
