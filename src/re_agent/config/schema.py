@@ -1,4 +1,5 @@
 """Configuration schema dataclasses for re-agent."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -8,33 +9,51 @@ from dataclasses import dataclass, field
 class ProjectProfile:
     """Project-specific patterns and paths."""
 
-    hook_patterns: list[str] = field(default_factory=lambda: [
-        r"RH_ScopedInstall\s*\(\s*(\w+)\s*,\s*(0x[0-9A-Fa-f]+)",
-        r"RH_ScopedVirtualInstall\s*\(\s*(\w+)\s*,\s*(0x[0-9A-Fa-f]+)",
-    ])
-    stub_patterns: list[str] = field(default_factory=lambda: [
-        r"plugin::Call",
-    ])
-    stub_markers: list[str] = field(default_factory=lambda: [
-        "NOTSA_UNREACHABLE",
-    ])
+    hook_patterns: list[str] = field(
+        default_factory=lambda: [
+            r"RH_ScopedInstall\s*\(\s*(\w+)\s*,\s*(0x[0-9A-Fa-f]+)",
+            r"RH_ScopedVirtualInstall\s*\(\s*(\w+)\s*,\s*(0x[0-9A-Fa-f]+)",
+        ]
+    )
+    stub_patterns: list[str] = field(
+        default_factory=lambda: [
+            r"plugin::Call",
+        ]
+    )
+    stub_markers: list[str] = field(
+        default_factory=lambda: [
+            "NOTSA_UNREACHABLE",
+        ]
+    )
     stub_call_prefix: str = "plugin::Call"
     class_macro: str = "RH_ScopedClass"
     source_root: str = "source/game_sa"
-    source_extensions: list[str] = field(default_factory=lambda: [
-        ".cpp", ".h", ".hpp",
-    ])
+    source_extensions: list[str] = field(
+        default_factory=lambda: [
+            ".cpp",
+            ".h",
+            ".hpp",
+        ]
+    )
     hooks_csv: str | None = "docs/hooks.csv"
 
 
 @dataclass
 class LLMConfig:
-    """LLM provider configuration."""
+    """LLM provider configuration.
+
+    Defaults target the Claude provider running on AWS Bedrock with the
+    ``us.anthropic.claude-opus-4-6-v1`` inference profile. Set ``use_bedrock``
+    to ``false`` (and provide ``api_key``/``model``) to use the direct
+    Anthropic API or an OpenAI-compatible endpoint instead.
+    """
 
     provider: str = "claude"
-    model: str = "claude-sonnet-4-5-20250929"
+    model: str = "us.anthropic.claude-opus-4-6-v1"
     api_key: str | None = None
     base_url: str | None = None
+    use_bedrock: bool = True
+    aws_region: str | None = None
     max_tokens: int = 4096
     temperature: float = 0.0
     timeout_s: int = 1800

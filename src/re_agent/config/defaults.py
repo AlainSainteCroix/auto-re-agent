@@ -27,9 +27,11 @@ project_profile:
 
 llm:
   provider: "claude"
-  model: "claude-sonnet-4-5-20250929"
-  # api_key: null  # Set via RE_AGENT_LLM_API_KEY env var
-  # base_url: null  # Set via RE_AGENT_LLM_BASE_URL env var
+  model: "us.anthropic.claude-opus-4-6-v1"  # Bedrock inference profile id
+  use_bedrock: true   # false -> direct Anthropic / OpenAI-compatible API
+  # aws_region: null  # Set via RE_AGENT_LLM_AWS_REGION or AWS_REGION
+  # api_key: null  # Set via RE_AGENT_LLM_API_KEY env var (direct mode)
+  # base_url: null  # Set via RE_AGENT_LLM_BASE_URL env var (direct mode)
   max_tokens: 4096
   temperature: 0.0
   timeout_s: 1800

@@ -14,6 +14,8 @@ CLI flags > Environment variables > YAML config > Defaults
 | `RE_AGENT_LLM_API_KEY` | `llm.api_key` |
 | `RE_AGENT_LLM_MODEL` | `llm.model` |
 | `RE_AGENT_LLM_BASE_URL` | `llm.base_url` |
+| `RE_AGENT_BEDROCK` | `llm.use_bedrock` |
+| `RE_AGENT_LLM_AWS_REGION` | `llm.aws_region` |
 | `RE_AGENT_BACKEND_CLI_PATH` | `backend.cli_path` |
 | `RE_AGENT_BACKEND_TIMEOUT` | `backend.timeout_s` |
 
@@ -22,9 +24,11 @@ CLI flags > Environment variables > YAML config > Defaults
 ```yaml
 llm:
   provider: "claude"        # claude | openai | openai-compat | codex
-  model: "claude-sonnet-4-5-20250929"
-  api_key: null
-  base_url: null
+  model: "us.anthropic.claude-opus-4-6-v1"  # Bedrock inference profile (default)
+  use_bedrock: true         # false -> direct Anthropic / OpenAI-compatible API
+  aws_region: null          # Bedrock region; falls back to AWS_REGION
+  api_key: null             # direct mode only
+  base_url: null            # direct mode only
   max_tokens: 4096
   temperature: 0.0
   timeout_s: 1800
@@ -32,7 +36,7 @@ llm:
 
 Notes:
 
-- `claude` uses the Anthropic SDK and typically reads `ANTHROPIC_API_KEY`
+- `claude` defaults to AWS Bedrock (`use_bedrock: true`) with the `us.anthropic.claude-opus-4-6-v1` inference profile, reading AWS credentials from the standard chain. Set `use_bedrock: false` to use the direct Anthropic API (`ANTHROPIC_API_KEY`)
 - `openai` and `openai-compat` use the OpenAI-compatible chat completions provider and typically read `OPENAI_API_KEY`
 - `codex` uses the local `codex` CLI and ChatGPT login credentials instead of an API key
 
