@@ -1,7 +1,11 @@
 """Ghidra CLI bridge backend implementation."""
+
 from __future__ import annotations
 
+import contextlib
+import os
 import re
+import tempfile
 
 from re_agent.backend.protocol import BackendCapabilities
 from re_agent.core.models import (
@@ -44,9 +48,7 @@ class GhidraBridgeBackend:
         """
         ok, output = run_cmd([self._cli_path, *args], self._timeout_s)
         if not ok:
-            raise RuntimeError(
-                f"Ghidra CLI failed: {self._cli_path} {' '.join(args)}\n{output}"
-            )
+            raise RuntimeError(f"Ghidra CLI failed: {self._cli_path} {' '.join(args)}\n{output}")
         return output
 
     def _try_run(self, *args: str) -> str | None:
@@ -85,9 +87,7 @@ class GhidraBridgeBackend:
           return non-zero for ``--help`` or for bad arguments while still
           recognising the sub-command.
         """
-        rc, _stdout, stderr = run_cmd_split(
-            [self._cli_path, subcmd, "--help"], timeout_s=min(self._timeout_s, 10)
-        )
+        rc, _stdout, stderr = run_cmd_split([self._cli_path, subcmd, "--help"], timeout_s=min(self._timeout_s, 10))
         if rc == 0:
             return True
         stderr_lower = stderr.lower()
@@ -113,7 +113,7 @@ class GhidraBridgeBackend:
         caps = BackendCapabilities(has_decompile=True)
 
         probes: list[tuple[str, str]] = [
-            ("has_asm", "asm"),
+            ("has_asm", "dump-asm"),
             ("has_structs", "source-struct"),
             ("has_xrefs", "xrefs-from"),
             ("has_search", "search"),
@@ -244,9 +244,34 @@ class GhidraBridgeBackend:
     # -- asm ------------------------------------------------------------------
 
     def get_asm(self, target: str) -> AsmResult | None:
-        """Retrieve disassembly for a function."""
-        raw = self._try_run("asm", target)
-        if raw is None:
+        """Retrieve disassembly for a function.
+
+        The ``ghidra-bridge`` CLI writes the instruction dump to a file
+        (``dump-asm <target> <output>``) rather than stdout, so we direct
+        it to a temporary file and read the result back.
+        """
+        fd, out_path = tempfile.mkstemp(suffix=".asm")
+        os.close(fd)
+        try:
+            ok, _ = run_cmd([self._cli_path, "dump-asm", target, out_path], self._timeout_s)
+            if not ok:
+                return None
+            try:
+                # Disassembly dumps are semi-binary (string operands, raw
+                # bytes), so decode leniently: a stray non-UTF-8 byte must
+                # not sink the whole dump. ``errors="replace"`` keeps text
+                # methods (``UnicodeDecodeError`` is a ``ValueError``, which
+                # ``except OSError`` would not catch).
+                with open(out_path, encoding="utf-8", errors="replace") as fh:
+                    raw = fh.read()
+            except OSError:
+                return None
+        finally:
+            with contextlib.suppress(OSError):
+                os.unlink(out_path)
+
+        # CLI exited 0 but produced nothing to disassemble.
+        if not raw.strip():
             return None
 
         lines = raw.strip().splitlines()
