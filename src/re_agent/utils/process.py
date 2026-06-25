@@ -1,4 +1,5 @@
 """Subprocess execution utilities."""
+
 from __future__ import annotations
 
 import subprocess
@@ -30,11 +31,13 @@ def run_cmd(args: Sequence[str], timeout_s: int = 45) -> tuple[bool, str]:
         return False, f"TIMEOUT after {timeout_s}s: {' '.join(str(a) for a in args)}\n{e}"
     except FileNotFoundError:
         return False, f"Command not found: {args[0]}"
+    except OSError as e:
+        # cli_path exists but cannot be executed (e.g. not executable,
+        # wrong arch, broken pipe). Surface it instead of crashing.
+        return False, f"Could not run {args[0]}: {e}"
 
 
-def run_cmd_split(
-    args: Sequence[str], timeout_s: int = 45
-) -> tuple[int, str, str]:
+def run_cmd_split(args: Sequence[str], timeout_s: int = 45) -> tuple[int, str, str]:
     """Run a command and return ``(returncode, stdout, stderr)`` separately.
 
     Unlike :func:`run_cmd`, this keeps stdout and stderr in separate streams
@@ -55,3 +58,7 @@ def run_cmd_split(
         return -1, "", f"TIMEOUT after {timeout_s}s: {e}"
     except FileNotFoundError:
         return -1, "", f"Command not found: {args[0]}"
+    except OSError as e:
+        # cli_path exists but cannot be executed (e.g. not executable,
+        # wrong arch). Surface it instead of crashing.
+        return -1, "", f"Could not run {args[0]}: {e}"
