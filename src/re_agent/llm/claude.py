@@ -1,6 +1,8 @@
 """Claude (Anthropic) LLM provider implementation."""
+
 from __future__ import annotations
 
+import os
 import uuid
 from typing import Any
 
@@ -10,27 +12,63 @@ from re_agent.llm.protocol import Message
 
 
 class ClaudeProvider:
-    """LLM provider backed by the Anthropic Claude API.
+    """LLM provider backed by an Anthropic-compatible Claude API.
 
     Implements :class:`LLMProvider` using the ``anthropic`` Python SDK.
 
+    Two backends are supported:
+
+    * **Bedrock** (recommended here): when ``use_bedrock`` is true — or the
+      ``RE_AGENT_BEDROCK`` env var is set — the client uses
+      ``anthropic.AnthropicBedrock``, which reads AWS credentials from the
+      standard chain (``~/.aws/credentials``, ``AWS_*`` env vars, instance
+      role). No Anthropic API key, no custom gateway.
+    * **Direct / compatible API**: otherwise the client uses
+      ``anthropic.Anthropic`` against the official API, or any
+      Anthropic-compatible endpoint set via ``ANTHROPIC_BASE_URL``.
+
     Args:
-        api_key: Anthropic API key.  If ``None``, the SDK falls back to the
-            ``ANTHROPIC_API_KEY`` environment variable.
-        model: Model identifier (e.g. ``"claude-sonnet-4-5-20250929"``).
+        api_key: API key (direct mode only). If ``None``, the SDK falls back
+            to the ``ANTHROPIC_API_KEY`` environment variable.
+        model: Model identifier. If ``None``, falls back to the right env var
+            for the active backend, then a sensible default.
         max_tokens: Maximum tokens in the response.
         temperature: Sampling temperature (``0.0`` = deterministic).
+        base_url: Anthropic-compatible endpoint (direct mode only). If
+            ``None``, falls back to the ``ANTHROPIC_BASE_URL`` env var.
+        use_bedrock: Force the Bedrock backend. If ``None``, enabled when the
+            ``RE_AGENT_BEDROCK`` env var is set to a truthy value.
     """
 
     def __init__(
         self,
         api_key: str | None = None,
-        model: str = "claude-sonnet-4-5-20250929",
+        model: str | None = None,
         max_tokens: int = 4096,
         temperature: float = 0.0,
+        base_url: str | None = None,
+        use_bedrock: bool | None = None,
     ) -> None:
-        self._client = anthropic.Anthropic(api_key=api_key)
-        self._model = model
+        if use_bedrock is None:
+            use_bedrock = os.environ.get("RE_AGENT_BEDROCK", "").lower() in ("1", "true", "yes")
+
+        if use_bedrock:
+            bedrock_kwargs: dict[str, Any] = {}
+            region = os.environ.get("AWS_REGION") or os.environ.get("AWS_DEFAULT_REGION")
+            if region:
+                bedrock_kwargs["aws_region"] = region
+            self._client: anthropic.Anthropic | anthropic.AnthropicBedrock = anthropic.AnthropicBedrock(
+                **bedrock_kwargs
+            )
+            self._model = model or os.environ.get("RE_AGENT_BEDROCK_MODEL", "us.anthropic.claude-opus-4-6-v1")
+        else:
+            resolved_base_url = base_url or os.environ.get("ANTHROPIC_BASE_URL")
+            client_kwargs: dict[str, Any] = {"api_key": api_key}
+            if resolved_base_url:
+                client_kwargs["base_url"] = resolved_base_url
+            self._client = anthropic.Anthropic(**client_kwargs)
+            self._model = model or os.environ.get("ANTHROPIC_MODEL", "claude-opus-4-8")
+
         self._max_tokens = max_tokens
         self._temperature = temperature
         self._conversations: dict[str, list[Message]] = {}
