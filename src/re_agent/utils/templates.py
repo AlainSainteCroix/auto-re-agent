@@ -1,4 +1,5 @@
 """Simple string-template rendering utilities."""
+
 from __future__ import annotations
 
 import string
@@ -17,8 +18,21 @@ def render_template(template_path: Path, **variables: str) -> str:
 
     Returns:
         The rendered template string.
+
+    Raises:
+        FileNotFoundError: If the template file does not exist, with a message
+            naming the path and the likely cause (broken/incomplete install).
+        OSError: If the template file exists but cannot be read.
     """
-    text = template_path.read_text(encoding="utf-8")
+    try:
+        text = template_path.read_text(encoding="utf-8")
+    except FileNotFoundError as err:
+        raise FileNotFoundError(
+            f"Template file not found: {template_path}. The prompt templates ship with the package; "
+            "a missing file usually means a broken or incomplete install."
+        ) from err
+    except OSError as err:
+        raise OSError(f"Could not read template file {template_path}: {err}") from err
     tmpl = string.Template(text)
     return tmpl.safe_substitute(variables)
 
