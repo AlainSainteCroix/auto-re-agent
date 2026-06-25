@@ -1,4 +1,5 @@
 """JSON-backed persistent session state for tracking reversal progress."""
+
 from __future__ import annotations
 
 import json
@@ -21,9 +22,31 @@ class Session:
 
     def load(self) -> None:
         try:
-            self._data = json.loads(self.path.read_text(encoding="utf-8"))
+            data = json.loads(self.path.read_text(encoding="utf-8"))
         except (json.JSONDecodeError, OSError):
             self._data = {"functions": {}, "runs": []}
+            return
+        self._data = self._coerce(data)
+
+    @staticmethod
+    def _coerce(data: Any) -> dict[str, Any]:
+        """Coerce parsed JSON into the expected progress shape.
+
+        A progress file may parse cleanly yet be structurally invalid: a
+        top-level list, a missing ``functions``/``runs`` key, or a key of the
+        wrong type (hand edits, a partially written/concurrent run, an older
+        schema). Without this guard such a file would not crash :meth:`load`
+        but every later access (``is_completed``, ``get_summary``, ...) would.
+        Fall back to empty containers for anything that does not fit.
+        """
+        if not isinstance(data, dict):
+            return {"functions": {}, "runs": []}
+        functions = data.get("functions")
+        runs = data.get("runs")
+        return {
+            "functions": functions if isinstance(functions, dict) else {},
+            "runs": runs if isinstance(runs, list) else [],
+        }
 
     def save(self) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)
