@@ -1,4 +1,5 @@
 """Configuration loader for re-agent."""
+
 from __future__ import annotations
 
 import dataclasses
@@ -35,11 +36,13 @@ def _load_yaml_file(path: Path) -> dict[str, Any]:
         import yaml  # type: ignore[import-untyped]
     except ImportError as err:
         raise ImportError(
-            "PyYAML is required for loading YAML config files. "
-            "Install it with: pip install pyyaml"
+            "PyYAML is required for loading YAML config files. Install it with: pip install pyyaml"
         ) from err
     text = path.read_text(encoding="utf-8")
-    data = yaml.safe_load(text)
+    try:
+        data = yaml.safe_load(text)
+    except yaml.YAMLError as err:
+        raise ValueError(f"Invalid YAML in config file {path}: {err}") from err
     if data is None:
         return {}
     if not isinstance(data, dict):
@@ -69,7 +72,10 @@ def _apply_env_overrides(raw: dict[str, Any]) -> dict[str, Any]:
             if part not in d or not isinstance(d[part], dict):
                 d[part] = {}
             d = d[part]
-        d[key_path[-1]] = cast_type(value)
+        try:
+            d[key_path[-1]] = cast_type(value)
+        except (ValueError, TypeError) as err:
+            raise ValueError(f"Invalid value for {env_var}: {value!r} (expected {cast_type.__name__})") from err
 
     return raw
 
@@ -127,7 +133,9 @@ def _build_with_coercion(cls: type[_T], data: dict[str, Any]) -> _T:
         else:
             _log.warning(
                 "Unknown config key '%s' in %s (known: %s) — ignored",
-                k, cls.__name__, ", ".join(sorted(known)),
+                k,
+                cls.__name__,
+                ", ".join(sorted(known)),
             )
     return cls(**filtered)
 
@@ -157,15 +165,31 @@ def _build_output_config(data: dict[str, Any]) -> OutputConfig:
     return _build_with_coercion(OutputConfig, data)
 
 
+def _section(raw: dict[str, Any], name: str) -> dict[str, Any]:
+    """Extract a config section, ensuring it is a mapping.
+
+    An absent section (or an explicit ``section:`` with no value, which YAML
+    parses as ``None``) yields an empty dict so defaults apply. A section set
+    to a scalar/list (e.g. ``llm: claude``) is a user mistake and raises a
+    clear error instead of an opaque ``AttributeError`` downstream.
+    """
+    section = raw.get(name)
+    if section is None:
+        return {}
+    if not isinstance(section, dict):
+        raise ValueError(f"Config section '{name}' must be a mapping, got {type(section).__name__}")
+    return section
+
+
 def _build_config(raw: dict[str, Any]) -> ReAgentConfig:
     """Build a ReAgentConfig from a raw dict."""
     return ReAgentConfig(
-        project_profile=_build_project_profile(raw.get("project_profile", {})),
-        llm=_build_llm_config(raw.get("llm", {})),
-        backend=_build_backend_config(raw.get("backend", {})),
-        parity=_build_parity_config(raw.get("parity", {})),
-        orchestrator=_build_orchestrator_config(raw.get("orchestrator", {})),
-        output=_build_output_config(raw.get("output", {})),
+        project_profile=_build_project_profile(_section(raw, "project_profile")),
+        llm=_build_llm_config(_section(raw, "llm")),
+        backend=_build_backend_config(_section(raw, "backend")),
+        parity=_build_parity_config(_section(raw, "parity")),
+        orchestrator=_build_orchestrator_config(_section(raw, "orchestrator")),
+        output=_build_output_config(_section(raw, "output")),
     )
 
 

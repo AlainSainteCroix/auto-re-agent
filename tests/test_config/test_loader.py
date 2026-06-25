@@ -1,4 +1,5 @@
 """Tests for config loading."""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -37,3 +38,37 @@ def test_env_override(monkeypatch: pytest.MonkeyPatch) -> None:
     config = load_config(None)
     assert config.llm.provider == "openai"
     assert config.llm.model == "gpt-4o"
+
+
+# -- Robustness: malformed / mistyped config -----------------------------------
+
+
+def test_malformed_yaml_raises_clear_error(tmp_path: Path) -> None:
+    """A YAML syntax error must surface as a clear ValueError naming the file."""
+    cfg = tmp_path / "re-agent.yaml"
+    cfg.write_text("llm:\n  provider: claude\n   model: oops\n")  # bad indentation
+    with pytest.raises(ValueError, match="Invalid YAML"):
+        load_config(cfg)
+
+
+def test_non_mapping_section_raises_clear_error(tmp_path: Path) -> None:
+    """A section set to a scalar (e.g. `llm: claude`) must raise, not AttributeError."""
+    cfg = tmp_path / "re-agent.yaml"
+    cfg.write_text("llm: claude\n")
+    with pytest.raises(ValueError, match="section 'llm' must be a mapping"):
+        load_config(cfg)
+
+
+def test_empty_section_falls_back_to_defaults(tmp_path: Path) -> None:
+    """An explicit but empty section (`llm:`) yields defaults, not an error."""
+    cfg = tmp_path / "re-agent.yaml"
+    cfg.write_text("llm:\n")
+    config = load_config(cfg)
+    assert config.llm.provider == "claude"
+
+
+def test_invalid_env_int_raises_clear_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A non-numeric int env override must raise a clear ValueError."""
+    monkeypatch.setenv("RE_AGENT_BACKEND_TIMEOUT", "not-a-number")
+    with pytest.raises(ValueError, match="RE_AGENT_BACKEND_TIMEOUT"):
+        load_config(None)
