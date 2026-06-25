@@ -1,4 +1,5 @@
 """OpenAI-compatible LLM provider implementation."""
+
 from __future__ import annotations
 
 import uuid
@@ -45,9 +46,7 @@ class OpenAIProvider:
 
     def send(self, messages: list[Message], **kwargs: Any) -> str:
         """Send messages via the chat completions API and return the response."""
-        api_messages: list[dict[str, str]] = [
-            {"role": m.role, "content": m.content} for m in messages
-        ]
+        api_messages: list[dict[str, str]] = [{"role": m.role, "content": m.content} for m in messages]
 
         response = self._client.chat.completions.create(
             model=kwargs.get("model", self._model),
@@ -56,8 +55,12 @@ class OpenAIProvider:
             temperature=kwargs.get("temperature", self._temperature),
         )
 
-        choice = response.choices[0]
-        return choice.message.content or ""
+        # Third-party OpenAI-compatible endpoints (vLLM, Ollama, ...) do not
+        # always return a well-formed payload: an empty ``choices`` list would
+        # raise an opaque IndexError, and a content-less message yields None.
+        if not response.choices:
+            raise RuntimeError("OpenAI-compatible endpoint returned no choices in the response")
+        return response.choices[0].message.content or ""
 
     @property
     def supports_conversations(self) -> bool:
